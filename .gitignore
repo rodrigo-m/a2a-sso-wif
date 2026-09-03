@@ -1,0 +1,156 @@
+# ==============================================================================
+# Google Agent Development Kit (ADK) .gitignore
+# ==============================================================================
+
+# --- Secrets, Credentials & Environment Variables ---
+.env
+.env.*
+!.env.example
+*.env
+*.key
+*.pem
+*.cert
+*.p12
+*credentials*.json
+*service_account*.json
+*service-account*.json
+gcp-key*.json
+client_secret*.json
+token.json
+oauth2_*.json
+application_default_credentials.json
+
+# --- Agent Runtime, Sessions & Artifacts ---
+.agent/
+agent_data/
+agent_sessions/
+session_history/
+.sessions/
+artifacts/
+scratch/
+brain/
+.gemini/
+.jetski/
+sidecar_data/
+mcp_logs/
+
+# --- Evaluations, Observability & Tracing ---
+logs/
+*.log
+eval_results/
+eval_runs/
+trace_data/
+mlruns/
+wandb/
+.wandb/
+phoenix_data/
+.phoenix/
+
+# --- Local Databases & Vector Stores ---
+*.db
+*.sqlite
+*.sqlite3
+chroma_data/
+chromadb/
+.chroma/
+faiss_index/
+.faiss/
+lancedb/
+.lancedb/
+qdrant_storage/
+milvus_data/
+weaviate_data/
+
+# --- Local Models, Checkpoints & Caches ---
+models/
+checkpoints/
+*.safetensors
+*.gguf
+*.bin
+*.onnx
+*.tflite
+*.litert
+*.pt
+*.pth
+.cache/
+hf_cache/
+
+# --- Python Environment & Bytecode ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.conda/
+
+# --- Testing, Linting & Type Checking ---
+.pytest_cache/
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.mypy_cache/
+.pyre/
+.pytype/
+.ruff_cache/
+
+# --- Jupyter Notebooks ---
+.ipynb_checkpoints
+*-checkpoint.py
+*-checkpoint.ipynb
+
+# --- Operating System & Editor Artifacts ---
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDEs & Editors
+.idea/
+*.swp
+*.swo
+*~
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json

@@ -1,0 +1,42 @@
+{
+  "name": "a2a_agent",
+  "description": "Enterprise ADK Agent running on Google Cloud Agent Runtime with Entra ID SSO & WIF authentication.",
+  "version": "1.0.0",
+  "supportedInterfaces": [
+    {
+      "url": "http://localhost:8000/a2a",
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": false
+  },
+  "defaultInputModes": [
+    "text/plain"
+  ],
+  "defaultOutputModes": [
+    "text/plain"
+  ],
+  "skills": [
+    {
+      "id": "a2a_agent",
+      "name": "model",
+      "description": "Enterprise ADK Agent running on Google Cloud Agent Runtime.",
+      "tags": ["llm", "orchestrator"]
+    },
+    {
+      "id": "a2a_agent-get_agent_status",
+      "name": "get_agent_status",
+      "description": "Retrieves current operational status, region, model, and caller context.",
+      "tags": ["llm", "tools", "status"]
+    },
+    {
+      "id": "a2a_agent-get_caller_identity",
+      "name": "get_caller_identity",
+      "description": "Retrieves caller identity and SSO/WIF federation context for Entra ID users.",
+      "tags": ["llm", "tools", "auth", "sso", "wif"]
+    }
+  ]
+}

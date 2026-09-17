@@ -15,23 +15,131 @@ Enterprise autonomous agent built with the **Google Agent Development Kit (ADK)*
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Architecture & Component Topology
 
 ```mermaid
-graph TD
-    Client["User / API Caller / Orchestrator"] --> AgentRuntime["Google Cloud Agent Runtime (Vertex AI)"]
-    subgraph "Agent Container (ADK)"
-        AgentInstance["ADK Root Agent (a2a_agent)"]
-        LLM["Gemini 2.5 Flash (Vertex AI ADC)"]
-        Tools["Agent Tools (get_agent_status, etc.)"]
-        State["Session State & Memory"]
-        
-        AgentInstance --> LLM
-        AgentInstance --> Tools
-        AgentInstance --> State
+graph TB
+    subgraph ClientTier["Client & Identity Layer"]
+        User["End User (Browser)"]
+        Entra["Microsoft Entra ID (IdP) - OAuth 2.0 / OIDC"]
+        ClientApp["FastAPI Client App (MSAL.js + WIF Service)"]
+        User <-->|"1. OIDC Web SSO (Implicit Flow)"| Entra
+        User <-->|"2. Web UI & Chat Interaction"| ClientApp
     end
-    AgentRuntime --> AgentInstance
+
+    subgraph GCPAccessTier["Google Cloud Identity & Access Tier"]
+        STS["Google Cloud STS (Workforce Identity Federation)"]
+        IAM["Cloud IAM Engine (Direct Principal Access)"]
+        ClientApp -->|"3. RFC 8693 Token Exchange"| STS
+        STS -.->|"Verify Token Signature & JWKS"| Entra
+        ClientApp -->|"4. Stream Query with STS Token"| AgentRuntime
+        AgentRuntime -.->|"Evaluate Caller IAM Policy"| IAM
+    end
+
+    subgraph AgentTier["Google Cloud Agent Runtime (Vertex AI)"]
+        AgentRuntime["Vertex AI Reasoning Engine (:streamQuery Endpoint)"]
+        subgraph AgentContainer["ADK Agent Container (a2a_agent)"]
+            RootAgent["ADK Root Agent (resolve_caller_principal)"]
+            LLM["Gemini 2.5 Flash (Vertex AI ADC)"]
+            Tools["Agent Tools (get_caller_identity, get_agent_status)"]
+            State["Session State & Memory"]
+            
+            RootAgent --> LLM
+            RootAgent --> Tools
+            RootAgent --> State
+        end
+        AgentRuntime --> RootAgent
+    end
 ```
+
+---
+
+## 🔄 End-to-End SSO & WIF Step-by-Step Flow
+
+The following diagram illustrates every single step of the authentication, token exchange, authorization, and agent execution flow across all system boundaries:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as End User
+    participant Browser as Web Browser (MSAL.js)
+    participant Entra as Microsoft Entra ID
+    participant Backend as Client App Backend (FastAPI)
+    participant STS as Google Cloud STS
+    participant IAM as Google Cloud IAM
+    participant Runtime as Vertex AI Agent Runtime
+    participant ADK as ADK Root Agent (a2a_agent)
+    participant LLM as Gemini 2.5 Flash
+
+    Note over User,Entra: Phase 1: Microsoft Entra ID SSO Authentication (OIDC Implicit Flow)
+    User->>Browser: Click "Sign in with Entra ID"
+    Browser->>Entra: Request OIDC ID Token via loginPopup()
+    Entra-->>User: Prompt user login credentials & MFA
+    User-->>Entra: Submit credentials & consent
+    Entra-->>Browser: Issue signed OIDC ID Token (JWT with claims)
+
+    Note over Browser,STS: Phase 2: Google Cloud STS Token Exchange (RFC 8693)
+    Browser->>Backend: POST /api/wif/exchange with ID token
+    Backend->>Backend: Build Workforce Pool Audience URI
+    Backend->>STS: POST /v1/token (OAuth 2.0 Token Exchange)
+    STS->>Entra: Verify JWT signature against OIDC JWKS endpoint
+    STS->>STS: Map claims (google.subject, attribute.email, google.groups)
+    STS-->>Backend: Issue short-lived federated Google Cloud access_token
+    Backend-->>Browser: Return STS token & canonical principal identifier
+
+    Note over Browser,IAM: Phase 3: Direct Principal Access & Agent Invocation
+    User->>Browser: Submit chat prompt in UI
+    Browser->>Backend: POST /api/chat (prompt, STS token, principal)
+    Backend->>Runtime: POST streamQuery endpoint (Bearer STS token)
+    Runtime->>IAM: Verify STS token & evaluate Direct Principal IAM policy
+    IAM-->>Runtime: Permission confirmed (roles/aiplatform.user)
+
+    Note over Runtime,LLM: Phase 4: ADK Agent Execution & Identity Verification
+    Runtime->>ADK: Invoke async_stream_query(message, user_id=principal)
+    ADK->>ADK: resolve_caller_principal() extracts verified caller context
+    ADK->>LLM: Forward conversation history, instructions, and prompt
+    LLM->>ADK: Call get_caller_identity tool
+    ADK-->>LLM: Return verified caller context (wif_token_used = True)
+    LLM-->>ADK: Generate grounded response with caller identity details
+
+    Note over Browser,Runtime: Phase 5: Server-Sent Events (SSE) Streaming Response
+    ADK-->>Runtime: Stream response chunks & tool events
+    Runtime-->>Backend: Stream SSE events (text, tool_call, tool_response)
+    Backend-->>Browser: Forward SSE chunks in real time
+    Browser-->>User: Render live text stream & interactive tool chips
+```
+
+### 📋 Detailed Step-by-Step Execution Breakdown
+
+| Step | Phase | Component / Actor | Action & Technical Description |
+| :---: | :--- | :--- | :--- |
+| **1** | **Phase 1: Entra ID SSO** | **End User** | User opens the web client interface (`http://localhost:8000`) and clicks **Sign in with Entra ID**. |
+| **2** | **Phase 1: Entra ID SSO** | **Web Browser (`app.js`)** | The MSAL.js client triggers `msalInstance.loginPopup()` requesting OIDC scopes (`openid`, `profile`, `email`) and implicit ID token grant. |
+| **3** | **Phase 1: Entra ID SSO** | **Microsoft Entra ID** | Entra ID renders the Microsoft login modal, prompting the user for corporate credentials, MFA verification, and tenant consent. |
+| **4** | **Phase 1: Entra ID SSO** | **End User** | User successfully authenticates and approves required application scopes. |
+| **5** | **Phase 1: Entra ID SSO** | **Microsoft Entra ID** | Entra ID issues a signed OpenID Connect ID Token (`id_token` RS256 JWT) containing identity claims (`sub`, `oid`, `email`, `preferred_username`, `name`, `groups`). |
+| **6** | **Phase 2: STS Token Exchange** | **Web Browser (`app.js`)** | The client automatically posts the raw Entra ID token to the backend endpoint `POST /api/wif/exchange` (`client_app/main.py`). |
+| **7** | **Phase 2: STS Token Exchange** | **Client Backend (`wif_service.py`)** | Constructs the Google Cloud Workforce Identity Pool audience URI: `//iam.googleapis.com/locations/global/workforcePools/<POOL_ID>/providers/<PROVIDER_ID>`. |
+| **8** | **Phase 2: STS Token Exchange** | **Client Backend (`wif_service.py`)** | Executes an RFC 8693 OAuth 2.0 Token Exchange request against `https://sts.googleapis.com/v1/token` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange`, `subject_token_type=urn:ietf:params:oauth:token-type:jwt`, and `requested_token_type=urn:ietf:params:oauth:token-type:access_token`. |
+| **9** | **Phase 2: STS Token Exchange** | **Google Cloud STS** | STS contacts Microsoft Entra ID's OIDC discovery JWKS endpoint (`https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys`) to cryptographically verify token signature, issuer, audience, and expiration. |
+| **10** | **Phase 2: STS Token Exchange** | **Google Cloud STS** | Evaluates Workforce Pool attribute mappings: `google.subject=assertion.sub`, `attribute.email=assertion.email \|\| assertion.preferred_username`, `google.display_name=assertion.name`, and `google.groups=assertion.groups`. |
+| **11** | **Phase 2: STS Token Exchange** | **Google Cloud STS** | STS mints and returns a short-lived federated Google Cloud access token representing the federated identity (**Direct Principal Access** — no service account keys). |
+| **12** | **Phase 2: STS Token Exchange** | **Client Backend (`wif_service.py`)** | Returns the STS token, expiry lifetime, and canonical IAM principal string (`principalSet://iam.googleapis.com/locations/global/workforcePools/<POOL>/attribute.email/<EMAIL>`) to the browser UI. |
+| **13** | **Phase 3: Direct Principal Access** | **End User** | User types a query into the chat input (e.g. *"Hello! Who am I and what is your status?"*) and hits send. |
+| **14** | **Phase 3: Direct Principal Access** | **Web Browser (`app.js`)** | Sends `POST /api/chat` with message payload, session ID, caller principal identifier, and the active Google Cloud STS federated token. |
+| **15** | **Phase 3: Direct Principal Access** | **Client Backend (`agent_engine_client.py`)** | Dispatches an HTTP POST request to Vertex AI Agent Runtime: `https://{location}-aiplatform.googleapis.com/v1beta1/{resource_name}:streamQuery` with `Authorization: Bearer <GCP_STS_TOKEN>` and body `{"classMethod": "async_stream_query", "input": {"user_id": "<principal>", "message": "...", "session_id": "..."}}`. |
+| **16** | **Phase 3: Direct Principal Access** | **Vertex AI Agent Runtime** | Intercepts the request and queries Cloud IAM to evaluate permissions for the federated principal. |
+| **17** | **Phase 3: Direct Principal Access** | **Google Cloud IAM** | Validates that the federated principal (`principalSet://.../attribute.email/<EMAIL>`) holds the `roles/aiplatform.user` IAM role bound to the Reasoning Engine resource or project level (configured via `grant_wif_engine_access.py`). Access is authorized. |
+| **18** | **Phase 4: ADK Agent Execution** | **Vertex AI Agent Runtime** | Invokes the containerized ADK Root Agent (`a2a_agent/agent.py`), passing the input payload, message, and caller `user_id`. |
+| **19** | **Phase 4: ADK Agent Execution** | **ADK Root Agent (`agent.py`)** | Executes `resolve_caller_principal(tool_context)` on the invocation `ToolContext`, extracting the verified workforce pool identity and setting `wif_token_used: true`. |
+| **20** | **Phase 4: ADK Agent Execution** | **ADK Root Agent (`agent.py`)** | Forwards the prompt, system instructions, and conversation state to the Gemini 2.5 Flash model. |
+| **21** | **Phase 4: ADK Agent Execution** | **Gemini 2.5 Flash** | Model detects user greeting / inquiry and triggers tool execution: `get_caller_identity` and `get_agent_status`. |
+| **22** | **Phase 4: ADK Agent Execution** | **ADK Tools (`agent.py`)** | Executes tools in the agent container, returning verified caller identity details (email, full principal URI, WIF status, region, session ID). |
+| **23** | **Phase 4: ADK Agent Execution** | **Gemini 2.5 Flash** | Synthesizes a grounded, verifiable response strictly based on the tool's verified identity context. |
+| **24** | **Phase 5: Streaming Response** | **ADK Root Agent (`agent.py`)** | Streams text chunks, function call events, and function response events back to Agent Runtime. |
+| **25** | **Phase 5: Streaming Response** | **Vertex AI Agent Runtime** | Streams Server-Sent Events (SSE) back across the open HTTP connection to the client backend. |
+| **26** | **Phase 5: Streaming Response** | **Client Backend (`agent_engine_client.py`)** | FastAPI relays the SSE data stream chunk-by-chunk to the client browser. |
+| **27** | **Phase 5: Streaming Response** | **Web Browser (`app.js`)** | The browser UI dynamically renders the typing assistant message, collapsible tool execution chips (`get_caller_identity`), and verified authentication metadata. |
 
 ---
 
@@ -136,6 +244,9 @@ Stream logs from Cloud Logging for the deployed Reasoning Engine:
 ## 🔐 Workforce Identity Federation (WIF) & Microsoft Entra ID Setup
 
 This project demonstrates end-to-end Single Sign-On (SSO) and direct principal access where Microsoft Entra ID (formerly Azure AD) users authenticate in a web client, exchange their Entra ID token for a Google Cloud Security Token Service (STS) federated access token, and query the deployed Vertex AI Reasoning Engine directly without service account key management.
+
+> [!TIP]
+> **Visual Walkthrough Available**: For a visual diagram illustrating every single interaction step between Entra ID, MSAL.js, Cloud STS, Cloud IAM, Vertex AI Agent Runtime, and the ADK Agent, see the [End-to-End SSO & WIF Step-by-Step Flow](#-end-to-end-sso--wif-step-by-step-flow).
 
 ### 📚 Source & Reference Documentation
 - Official Google Cloud Documentation: [Configure Workforce Identity Federation with Microsoft Entra ID and sign in users](https://docs.cloud.google.com/iam/docs/workforce-sign-in-microsoft-entra-id?utm_source=gemini)

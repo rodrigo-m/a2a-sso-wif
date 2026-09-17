@@ -1,10 +1,18 @@
-# Agent-to-Agent SSO (`a2a-sso`)
+# Agent-to-Agent SSO & WIF Explorer (`a2a-sso`)
 
-Enterprise autonomous agent built with the **Google Agent Development Kit (ADK)** and designed for deployment on **Google Cloud Agent Runtime (Vertex AI Reasoning Engines)**.
+This repository provides an end-to-end reference web application answering the question: **"How do I authenticate my end user with the Google Agent Development Kit (ADK) running in Google Cloud Agent Runtime (Vertex AI Reasoning Engines) if my Identity Provider (IdP) is Microsoft Entra ID?"**
+
+It demonstrates how a browser-based client application authenticates users via Microsoft Entra ID SSO (OIDC Implicit Flow), exchanges the Entra ID token with Google Cloud Security Token Service (STS) for a federated access token using Workforce Identity Federation (WIF) with Direct Principal Access, and directly queries the deployed ADK agent—enforcing granular IAM permissions without managing long-lived service account keys.
+
+## 🖥️ Web Application Interface
+
+| Initial State (Ready to Authenticate) | Authenticated Session & Direct Principal WIF |
+| :---: | :---: |
+| [![Initial State](docs/images/app_before_auth.png)](docs/images/app_before_auth.png) | [![Authenticated Session](docs/images/app_after_auth.png)](docs/images/app_after_auth.png) |
 
 > [!WARNING]
 > **Example Code Notice — Not Suitable for Production Without Adjustments**  
-> This repository contains reference and demonstration code intended to illustrate architectural concepts (Google Cloud Agent Runtime, A2A protocol, and Microsoft Entra ID SSO via Workload/Workforce Identity Federation). **This code is not suitable for production use as-is.** Critical adjustments are required before deploying to production environments, including:
+> This repository contains reference and demonstration code intended to illustrate architectural concepts (Google Cloud Agent Runtime, A2A protocol, and Microsoft Entra ID SSO via Workload/Workforce Identity Federation). **This code is not suitable for production use as-is.** Critical adjustments are required before deploying to production environments, including, but not limited to:
 > - **Restricting CORS**: Replacing wildcard (`*`) origins with explicit, trusted domains.
 > - **Server-Side Token Verification**: Validating Entra ID JWT signatures and claims against Microsoft JWKS endpoints before token exchange.
 > - **Removing Development Bypasses**: Disabling mock sign-in and local ADC token simulation endpoints.

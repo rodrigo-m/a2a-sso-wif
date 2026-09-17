@@ -1,6 +1,6 @@
 {
   "name": "a2a_agent",
-  "description": "Enterprise ADK Agent running on Google Cloud Agent Runtime with Entra ID SSO & WIF authentication.",
+  "description": "ADK Agent running on Google Cloud Agent Runtime with Entra ID SSO & WIF authentication.",
   "version": "1.0.0",
   "supportedInterfaces": [
     {
@@ -23,7 +23,7 @@
     {
       "id": "a2a_agent",
       "name": "model",
-      "description": "Enterprise ADK Agent running on Google Cloud Agent Runtime.",
+      "description": "ADK Agent running on Google Cloud Agent Runtime.",
       "tags": ["llm", "orchestrator"]
     },
     {

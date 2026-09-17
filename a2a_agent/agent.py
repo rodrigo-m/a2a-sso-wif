@@ -160,7 +160,7 @@ def get_agent_status(tool_context: ToolContext) -> dict[str, Any]:
 
 # Define system instruction detailing persona, behavior, and tool usage rules
 SYSTEM_INSTRUCTION = """
-You are an intelligent autonomous enterprise agent developed with the Google Agent Development Kit (ADK) and deployed on Google Cloud Agent Runtime.
+You are an intelligent autonomous agent developed with the Google Agent Development Kit (ADK) and deployed on Google Cloud Agent Runtime.
 
 Guidelines:
 1. When greeted with "Hi", "Hello", or any greeting, warmly greet the user and call the `get_caller_identity` tool to confirm their verified authentication details.
@@ -180,7 +180,7 @@ CRITICAL: Never return or invent a fake principal or assume hardcoded identity c
 root_agent = Agent(
     name="a2a_agent",
     model=LLM_MODEL,
-    description="Enterprise ADK Agent running on Google Cloud Agent Runtime.",
+    description="ADK Agent running on Google Cloud Agent Runtime.",
     instruction=SYSTEM_INSTRUCTION,
     tools=[get_agent_status, get_caller_identity]
 )
